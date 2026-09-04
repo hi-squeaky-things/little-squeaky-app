@@ -131,9 +131,6 @@ const selectedPatchInfo = computed(() => patches.value[selectedPatch.value]);
 const chordAvailable = computed(
   () => selectedPatchInfo.value !== undefined && selectedPatchInfo.value.mode !== 'Mono',
 );
-const selectedWaveformLabel = computed(
-  () => waveformNames[selectedWaveform.value] ?? waveformNames[0],
-);
 const selectedPatchLabel = computed(
   () => selectedPatchInfo.value?.name ?? 'Piano',
 );
