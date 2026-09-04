@@ -1,10 +1,19 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
-import logo from './assets/logo/logo.svg';
+import logo from './assets/logo/logo.png';
+
+type PatchInfo = {
+  name: string;
+  mode: 'Mono' | 'BiPoly' | 'QuadPoly' | 'OctoPoly';
+};
 
 const activeNotes = ref(new Set<number>());
+const heldNoteGroups = ref(new Map<number, number[]>());
 const errorMessage = ref('');
+const patches = ref<PatchInfo[]>([]);
+const selectedPatch = ref(0);
+const chordMode = ref(false);
 const selectedWaveform = ref(8);
 const octaveOffset = ref(0);
 const pointerDown = ref(false);
@@ -57,97 +66,125 @@ const whiteKeys = computed(() => displayedPianoKeys.value.filter((key) => !key.a
 const blackKeys = computed(() => displayedPianoKeys.value.filter((key) => key.accidental));
 
 const waveformNames = [
-  '00_AKWF_sin.wav',
-  '01_AKWF_saw.wav',
-  '02_AKWF_squ.wav',
-  '03_AKWF_tri.wav',
-  '04_AKWF_ebass_0001.wav',
-  '05_AKWF_cello_0001.wav',
-  '06_AKWF_violin_0001.wav',
-  '07_AKWF_eorgan_0001.wav',
-  '08_AKWF_epiano_0001.wav',
-  '09_AKWF_overtone_0001.wav',
-  'AKWF_granular_0001.wav',
-  'AKWF_granular_0002.wav',
-  'AKWF_granular_0003.wav',
-  'AKWF_granular_0004.wav',
-  'AKWF_granular_0005.wav',
-  'AKWF_granular_0006.wav',
-  'AKWF_granular_0007.wav',
-  'AKWF_granular_0008.wav',
-  'AKWF_granular_0009.wav',
-  'AKWF_granular_0010.wav',
-  'AKWF_granular_0011.wav',
-  'AKWF_granular_0012.wav',
-  'AKWF_granular_0013.wav',
-  'AKWF_granular_0014.wav',
-  'AKWF_granular_0015.wav',
-  'AKWF_granular_0016.wav',
-  'AKWF_granular_0017.wav',
-  'AKWF_granular_0018.wav',
-  'AKWF_granular_0019.wav',
-  'AKWF_granular_0020.wav',
-  'AKWF_granular_0021.wav',
-  'AKWF_granular_0022.wav',
-  'AKWF_granular_0023.wav',
-  'AKWF_granular_0024.wav',
-  'AKWF_granular_0025.wav',
-  'AKWF_granular_0026.wav',
-  'AKWF_granular_0027.wav',
-  'AKWF_granular_0028.wav',
-  'AKWF_granular_0029.wav',
-  'AKWF_granular_0030.wav',
-  'AKWF_granular_0031.wav',
-  'AKWF_granular_0032.wav',
-  'AKWF_granular_0033.wav',
-  'AKWF_granular_0034.wav',
-  'AKWF_granular_0035.wav',
-  'AKWF_granular_0036.wav',
-  'AKWF_granular_0037.wav',
-  'AKWF_granular_0038.wav',
-  'AKWF_granular_0039.wav',
-  'AKWF_granular_0040.wav',
-  'AKWF_granular_0041.wav',
-  'AKWF_granular_0042.wav',
-  'AKWF_granular_0043.wav',
-  'AKWF_granular_0044.wav',
-  'CONTRA_BASS.wav',
-  'HST_SLAP_BASS.wav',
+  'sin',
+  'saw',
+  'squ',
+  'tri',
+  'ebass',
+  'cello',
+  'violin',
+  'eorgan',
+  'epiano',
+  'overtone',
+  'granular_0001',
+  'granular_0002',
+  'granular_0003',
+  'granular_0004',
+  'granular_0005',
+  'granular_0006',
+  'granular_0007',
+  'granular_0008',
+  'granular_0009',
+  'granular_0010',
+  'granular_0011',
+  'granular_0012',
+  'granular_0013',
+  'granular_0014',
+  'granular_0015',
+  'granular_0016',
+  'granular_0017',
+  'granular_0018',
+  'granular_0019',
+  'granular_0020',
+  'granular_0021',
+  'granular_0022',
+  'granular_0023',
+  'granular_0024',
+  'granular_0025',
+  'granular_0026',
+  'granular_0027',
+  'granular_0028',
+  'granular_0029',
+  'granular_0030',
+  'granular_0031',
+  'granular_0032',
+  'granular_0033',
+  'granular_0034',
+  'granular_0035',
+  'granular_0036',
+  'granular_0037',
+  'granular_0038',
+  'granular_0039',
+  'granular_0040',
+  'granular_0041',
+  'granular_0042',
+  'granular_0043',
+  'granular_0044',
+  'contra_bass',
+  'slap_bass',
 ];
 
 const waveforms = waveformNames.map((label, value) => ({ label, value }));
 
 const activeVoiceCount = computed(() => activeNotes.value.size);
-const selectedWaveformLabel = computed(
-  () => waveformNames[selectedWaveform.value] ?? waveformNames[0],
+const selectedPatchInfo = computed(() => patches.value[selectedPatch.value]);
+const chordAvailable = computed(
+  () => selectedPatchInfo.value !== undefined && selectedPatchInfo.value.mode !== 'Mono',
+);
+const selectedPatchLabel = computed(
+  () => selectedPatchInfo.value?.name ?? 'Piano',
 );
 
+function refreshActiveNotes() {
+  activeNotes.value = new Set([...heldNoteGroups.value.values()].flat());
+}
+
 async function startNote(note: number) {
-  if (activeNotes.value.has(note)) return;
+  if (heldNoteGroups.value.has(note)) return;
+
+  const notes = chordMode.value && chordAvailable.value ? [note, note + 4, note + 7] : [note];
+  if (notes.some((chordNote) => chordNote < 24 || chordNote > 108)) {
+    errorMessage.value = 'Chord is outside the MIDI range';
+    return;
+  }
 
   errorMessage.value = '';
-  activeNotes.value = new Set(activeNotes.value).add(note);
+  heldNoteGroups.value = new Map(heldNoteGroups.value).set(note, notes);
+  refreshActiveNotes();
   try {
-    await invoke('play_note', { note, velocity: 100 });
+    await Promise.all(notes.map((chordNote) => invoke('play_note', { note: chordNote, velocity: 100 })));
   } catch (error) {
-    const notes = new Set(activeNotes.value);
-    notes.delete(note);
-    activeNotes.value = notes;
+    const groups = new Map(heldNoteGroups.value);
+    groups.delete(note);
+    heldNoteGroups.value = groups;
+    refreshActiveNotes();
+    await Promise.all(notes.map((chordNote) => invoke('stop_note', { note: chordNote }).catch(() => undefined)));
     errorMessage.value = String(error);
   }
 }
 
 async function stopNote(note: number) {
-  if (!activeNotes.value.has(note)) return;
+  const notes = heldNoteGroups.value.get(note);
+  if (!notes) return;
 
-  const notes = new Set(activeNotes.value);
-  notes.delete(note);
-  activeNotes.value = notes;
-  try {
-    await invoke('stop_note', { note });
-  } catch (error) {
+  const groups = new Map(heldNoteGroups.value);
+  groups.delete(note);
+  heldNoteGroups.value = groups;
+  const remainingNotes = new Set([...groups.values()].flat());
+  const notesToStop = notes.filter((chordNote) => !remainingNotes.has(chordNote));
+  refreshActiveNotes();
+  await Promise.all(notesToStop.map((chordNote) => invoke('stop_note', { note: chordNote }).catch((error) => {
     errorMessage.value = String(error);
-  }
+  })));
+}
+
+async function stopAllNotes() {
+  const notes = [...new Set([...heldNoteGroups.value.values()].flat())];
+  heldNoteGroups.value = new Map();
+  activeNotes.value = new Set();
+  await Promise.all(notes.map((note) => invoke('stop_note', { note }).catch((error) => {
+    errorMessage.value = String(error);
+  })));
 }
 
 function handlePointerDown(note: number, event: PointerEvent) {
@@ -165,14 +202,14 @@ async function releasePointer() {
   if (!pointerDown.value) return;
 
   pointerDown.value = false;
-  await Promise.all([...activeNotes.value].map((note) => stopNote(note)));
+  await stopAllNotes();
 }
 
 async function changeOctave(direction: -1 | 1) {
   const nextOffset = octaveOffset.value + direction;
   if (nextOffset < -2 || nextOffset > 3) return;
 
-  await Promise.all([...activeNotes.value].map((note) => stopNote(note)));
+  await stopAllNotes();
   octaveOffset.value = nextOffset;
 }
 
@@ -181,6 +218,25 @@ async function selectWaveform() {
   try {
     await invoke('select_waveform', { waveform: selectedWaveform.value });
     await loadWaveform();
+  } catch (error) {
+    errorMessage.value = String(error);
+  }
+}
+
+async function loadPatches() {
+  try {
+    patches.value = await invoke<PatchInfo[]>('get_patches');
+  } catch (error) {
+    errorMessage.value = String(error);
+  }
+}
+
+async function selectPatch() {
+  errorMessage.value = '';
+  await stopAllNotes();
+  if (!chordAvailable.value) chordMode.value = false;
+  try {
+    await invoke('select_patch', { patch: selectedPatch.value });
   } catch (error) {
     errorMessage.value = String(error);
   }
@@ -225,6 +281,7 @@ async function loadAudioOutput() {
 }
 
 onMounted(() => {
+  loadPatches();
   loadWaveform();
   loadAudioOutput();
   outputTimer = window.setInterval(loadAudioOutput, 50);
@@ -236,6 +293,7 @@ onUnmounted(() => {
   if (outputTimer !== undefined) window.clearInterval(outputTimer);
   window.removeEventListener('pointerup', releasePointer);
   window.removeEventListener('pointercancel', releasePointer);
+  stopAllNotes();
 });
 </script>
 
@@ -248,7 +306,7 @@ onUnmounted(() => {
             <img :src="logo" alt="Hi Squeaky Things logo" class="h-full w-full object-contain" />
           </div>
           <div>
-            <h1 class="mt-1 text-xl font-semibold tracking-[0.12em] text-white sm:text-2xl">Squeaky Machine</h1>
+            <h1 class="mt-1 text-xl font-semibold tracking-[0.12em] text-white sm:text-2xl">Little Squeaky</h1>
           </div>
         </div>
 
@@ -261,12 +319,26 @@ onUnmounted(() => {
         <div class="rounded-2xl border border-[rgba(148,163,184,0.22)] bg-[rgba(15,23,42,0.82)] p-4 shadow-[0_18px_40px_rgba(3,7,18,0.3)]">
           <div class="mb-2 flex items-center justify-between gap-3">
             <div>
-              <h2 class="mt-2 text-lg font-medium text-white">Waveform</h2>
+              <h2 class="mt-2 text-lg font-medium text-white">Patch & Waveform</h2>
             </div>
             <div class="rounded-full border border-[rgba(110,168,254,0.22)] bg-[rgba(110,168,254,0.1)] px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-[#cfe1ff]">
-              {{ selectedWaveform }} / {{ waveformNames.length - 1 }}
+              {{ selectedPatchLabel }}
             </div>
           </div>
+
+          <label class="mb-2 block" for="patch">
+            <span class="mb-2 block text-[10px] uppercase tracking-[0.24em] text-slate-400">Choose your patch</span>
+            <select
+              id="patch"
+              v-model="selectedPatch"
+              class="w-full rounded-xl border border-[rgba(148,163,184,0.22)] bg-[#0b1324] px-3 py-2.5 text-sm text-slate-100 outline-none transition focus:border-[rgba(110,168,254,0.9)] focus:ring-2 focus:ring-[rgba(110,168,254,0.2)]"
+              @change="selectPatch"
+            >
+              <option v-for="(patch, index) in patches" :key="patch.name" :value="index">
+                {{ patch.name }}
+              </option>
+            </select>
+          </label>
 
           <label class="mb-2 block" for="waveform">
             <span class="mb-2 block text-[10px] uppercase tracking-[0.24em] text-slate-400">Choose your waveform</span>
@@ -285,7 +357,6 @@ onUnmounted(() => {
           <div class="mb-5 rounded-xl border border-[rgba(148,163,184,0.18)] bg-[rgba(11,19,36,0.9)] p-3">
             <div class="mb-2 flex items-center justify-between text-[10px] uppercase tracking-[0.24em] text-slate-400">
               <span>Signal</span>
-              <span>{{ selectedWaveformLabel }}</span>
             </div>
             <svg
               class="h-20 w-full overflow-visible"
@@ -317,14 +388,7 @@ onUnmounted(() => {
               <div class="text-[9px] uppercase tracking-[0.2em] text-slate-400">Voices</div>
               <div class="mt-2 text-2xl font-semibold text-white">{{ activeVoiceCount }}</div>
             </div>
-            <div class="rounded-xl border border-[rgba(148,163,184,0.18)] bg-[rgba(11,19,36,0.9)] p-3">
-              <div class="text-[9px] uppercase tracking-[0.2em] text-slate-400">Mode</div>
-              <div class="mt-2 text-sm font-semibold text-[#cfe1ff]">LIVE</div>
-            </div>
-            <div class="rounded-xl border border-[rgba(148,163,184,0.18)] bg-[rgba(11,19,36,0.9)] p-3">
-              <div class="text-[9px] uppercase tracking-[0.2em] text-slate-400">Gain</div>
-              <div class="mt-2 text-sm font-semibold text-[#cfe1ff]">100%</div>
-            </div>
+           
           </div>
 
           <div class="mt-3 rounded-xl border border-[rgba(148,163,184,0.18)] bg-[rgba(11,19,36,0.9)] p-3">
@@ -394,6 +458,17 @@ onUnmounted(() => {
         </div>
 
         <div class="mt-3 flex items-center justify-center gap-3">
+          <button
+            type="button"
+            class="rounded-lg border border-[rgba(148,163,184,0.28)] bg-[rgba(11,19,36,0.8)] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-300 transition hover:border-[rgba(110,168,254,0.7)] hover:text-white disabled:cursor-not-allowed disabled:opacity-35"
+            :class="chordMode ? 'border-[#6ea8fe] bg-[rgba(110,168,254,0.18)] text-white' : ''"
+            :disabled="!chordAvailable"
+            :aria-pressed="chordMode"
+            :title="chordAvailable ? 'Play major chords' : 'Chord mode is unavailable for Mono patches'"
+            @click="chordMode = !chordMode"
+          >
+            Chord {{ chordMode ? 'on' : 'off' }}
+          </button>
           <button
             type="button"
             class="rounded-lg border border-[rgba(148,163,184,0.28)] bg-[rgba(11,19,36,0.8)] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-300 transition hover:border-[rgba(110,168,254,0.7)] hover:text-white disabled:cursor-not-allowed disabled:opacity-35"

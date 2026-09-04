@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    hst_app_lib::run()
+    lttl_squeaky_lib::run()
 }

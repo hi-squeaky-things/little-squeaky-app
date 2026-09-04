@@ -4,13 +4,15 @@
  app
 ```
 
-![Squeaky Machine application screenshot](docs/hst-app-screenshot.png)
-
 # Squeaky Machine App
 
 Squeaky Machine is a desktop control interface for [Little Weirdo](https://www.hi-squeaky-things.nl), a Rust and `no_std`-optimized synthesizer and sequencer for embedded devices. The application combines a Vue frontend with a Rust audio engine through Tauri, making it possible to explore sounds and play notes from a focused desktop interface.
 
 The synthesizer supports additive, subtractive, granular, and sample-based sound design. Squeaky Machine provides a visual way to select a sound source, inspect its waveform, monitor the generated output, and play the instrument from an on-screen keyboard.
+
+![Squeaky Machine application screenshot](docs/hst-app-screenshot.png)
+
+Get the release (only macosx for now): [Prerelease Little Squeaky App V0.1.0](https://github.com/hi-squeaky-things/little-squeaky-app/releases#release-app-v0.1.0)
 
 > [!CAUTION]
 > This project is actively being developed with frequent breaking changes. APIs may shift, features are incomplete, and stability is not guaranteed. Use at your own risk and expect regular updates that might require code adjustments. Have fun!

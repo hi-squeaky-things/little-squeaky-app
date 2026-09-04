@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "hst-app",
-  "version": "0.1.0",
-  "identifier": "ai.hisqueakythings.hst-app",
+  "productName": "little-squeaky",
+  "version": "0.2.0",
+  "identifier": "nl.hisqueakythings.little-squeakyp",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "hst-app",
+        "title": "little squeaky",
         "minWidth": 1024,
         "minHeight": 800,
         "width": 1024,
