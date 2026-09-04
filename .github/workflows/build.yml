@@ -1,9 +1,9 @@
-name: 'publish'
+name: 'build'
 
 on:
   push:
     branches:
-      - release
+      - main
 
 # This is the example for publishing a Universal macOS app with a signing certificate.
 # On each push to the `release` branch it will create or update a GitHub release, build your app, and upload the artifacts to the release.
@@ -38,14 +38,9 @@ jobs:
         run: yarn install # change this to npm, pnpm or bun depending on which one you use.
 
      
-      - name: build and publish
+      - name: build
         uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: app-v__VERSION__ # the action automatically replaces \_\_VERSION\_\_ with the app version.
-          releaseName: 'App v__VERSION__'
-          releaseBody: 'See the assets to download this version and install.'
-          releaseDraft: true
-          prerelease: false
-          args: ${{ matrix.args }}
+           args: ${{ matrix.args }}
