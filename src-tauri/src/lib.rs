@@ -1,17 +1,22 @@
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, SampleFormat, Stream, StreamConfig};
+use include_dir::{include_dir, File};
 use little_weirdo::synth::data::patches::{BoxedPatch, BoxedPatches};
 use little_weirdo::synth::data::waveforms::{BoxedWaveform, BoxedWaveforms};
-use little_weirdo::synth::patch::Patch;
+use little_weirdo::synth::patch::{Patch, SynthMode};
 use little_weirdo::synth::Synth;
+use serde::Serialize;
 use std::collections::VecDeque;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
+
+static SOUNDBANK: include_dir::Dir<'static> = include_dir!("$CARGO_MANIFEST_DIR/src/soundbank");
 
 enum AudioEvent {
     NoteOn { note: u8, velocity: u8 },
     NoteOff { note: u8 },
     SelectWaveform { waveform: u8 },
+    SelectPatch { patch: u8 },
 }
 
 struct AudioEngine {
@@ -83,15 +88,40 @@ fn create_synth(sample_rate: u16) -> Synth {
 
 fn create_patches() -> BoxedPatches {
     let mut patches = BoxedPatches::new();
+    let patch_files = patch_files();
+    for file in &patch_files {
+        let patch: Patch = serde_json::from_slice(file.contents())
+            .unwrap_or_else(|error| panic!("invalid patch {}: {error}", file.path().display()));
+        patches.add(BoxedPatch::new(patch));
+    }
+    let template = patch_files
+        .first()
+        .expect("at least one JSON patch must exist in the soundbank");
     for waveform in 0..WAVEFORMS.len() as u8 {
-        let mut patch: Patch = serde_json::from_slice(include_bytes!("soundbank/piano.json"))
-            .expect("bundled Little Weirdo piano patch must be valid");
+        let mut patch: Patch = serde_json::from_slice(template.contents())
+            .expect("soundbank patch template must be valid");
+        patch.name = format!("waveform_{waveform}");
         for voice in &mut patch.voices {
             voice.soundbank_index = waveform;
         }
         patches.add(BoxedPatch::new(patch));
     }
     patches
+}
+
+fn patch_files() -> Vec<&'static File<'static>> {
+    let mut files: Vec<_> = SOUNDBANK
+        .files()
+        .filter(|file| file.path().extension().is_some_and(|extension| extension == "json"))
+        .collect();
+    files.sort_by_key(|file| file.path());
+    files
+}
+
+#[derive(Serialize)]
+struct PatchInfo {
+    name: String,
+    mode: String,
 }
 
 fn build_stream<T>(
@@ -114,7 +144,11 @@ where
                     AudioEvent::NoteOff { note } => synth.note_off(note),
                     AudioEvent::SelectWaveform { waveform } => {
                         synth.all_note_off();
-                        synth.load_patch(waveform);
+                        synth.load_patch(patch_files().len() as u8 + waveform);
+                    }
+                    AudioEvent::SelectPatch { patch } => {
+                        synth.all_note_off();
+                        synth.load_patch(patch);
                     }
                 }
             }
@@ -247,6 +281,45 @@ fn select_waveform(
 }
 
 #[tauri::command]
+fn get_patches() -> Result<Vec<PatchInfo>, String> {
+    patch_files()
+        .into_iter()
+        .map(|file| {
+            let patch: Patch = serde_json::from_slice(file.contents())
+                .map_err(|error| format!("invalid patch {}: {error}", file.path().display()))?;
+            let mode = match patch.synth_config.mode {
+                SynthMode::Mono => "Mono",
+                SynthMode::BiPoly => "BiPoly",
+                SynthMode::QuadPoly => "QuadPoly",
+                SynthMode::OctoPoly => "OctoPoly",
+            };
+            Ok(PatchInfo {
+                name: patch.name,
+                mode: mode.to_string(),
+            })
+        })
+        .collect()
+}
+
+#[tauri::command]
+fn select_patch(
+    patch: u8,
+    engine: tauri::State<'_, Option<AudioEngine>>,
+) -> Result<(), String> {
+    let patch_count = patch_files().len();
+    if patch as usize >= patch_count {
+        return Err(format!("Patch must be between 0 and {}", patch_count - 1));
+    }
+
+    engine
+        .as_ref()
+        .ok_or_else(|| "Audio output is unavailable".to_string())?
+        .events
+        .send(AudioEvent::SelectPatch { patch })
+        .map_err(|_| "Audio engine is no longer available".to_string())
+}
+
+#[tauri::command]
 fn get_waveform(waveform: u8) -> Result<Vec<i16>, String> {
     let samples = WAVEFORMS
         .get(waveform as usize)
@@ -278,6 +351,8 @@ pub fn run() {
             play_note,
             stop_note,
             select_waveform,
+            get_patches,
+            select_patch,
             get_waveform,
             get_audio_output
         ])

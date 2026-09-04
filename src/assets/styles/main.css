@@ -2,14 +2,6 @@
 @import "tailwindcss-primeui";
 @import "primeicons/primeicons";
 
-@font-face {
-  font-family: "Bytesized";
-  src: url("../fonts/Bytesized.ttf") format("truetype");
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-}
-
 :root {
   color-scheme: dark;
   --hst-bg: #0d1320;
@@ -35,21 +27,15 @@ body,
 body {
   margin: 0;
   background:
-    linear-gradient(135deg, rgba(255, 204, 51, 0.2) 0%, rgba(226, 51, 255, 0.16) 48%, rgba(75, 225, 236, 0.18) 100%),
+    radial-gradient(circle at top left, rgba(110, 168, 254, 0.18), transparent 28%),
     linear-gradient(180deg, var(--hst-bg) 0%, #0b1220 100%);
   color: var(--hst-text);
   font-family: "Roboto Mono", "SFMono-Regular", "Menlo", monospace;
 }
 
-.hst-app-background {
-  background:
-    linear-gradient(135deg, rgba(255, 204, 51, 0.2) 0%, rgba(226, 51, 255, 0.16) 48%, rgba(75, 225, 236, 0.18) 100%),
-    linear-gradient(180deg, var(--hst-bg) 0%, #0b1220 100%);
-}
-
 h1,
 h2 {
-  font-family: "Bytesized", "Roboto Mono", "SFMono-Regular", "Menlo", monospace;
+  font-family: "Roboto Mono", "SFMono-Regular", "Menlo", monospace;
 }
 
 * {
